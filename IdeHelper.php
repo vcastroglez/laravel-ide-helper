@@ -135,7 +135,7 @@ class IdeHelper extends Command
 			$use_statements = $this->getUseStatements($original_lines);
 
 			foreach ($this->getMethodsDocBlocks($reflection) as $line => $doc_block) {
-				$method_line = $original_lines[$line];//vla continue from here
+				$method_line = $original_lines[$line];
 				$doc_block = $this->prependTabs(substr_count($method_line, "\t"), $doc_block) . PHP_EOL . $method_line;
 				$doc_block = str_replace($use_statements, '', $doc_block);
 				$content = str_replace($method_line, $doc_block, $content);
@@ -431,8 +431,13 @@ class IdeHelper extends Command
 
 		//The order is comment -> properties -> class definition and mixin
 		$comment = implode("\n", ($grouped['comment'] ?? [])) ?: " * <Class description here>";
-		$properties = implode("\n", array_unique($grouped['@property'] ?? [])) ?: " *";
-		$class_definition = $grouped['@class'][0] . "\n" . $grouped['@namespace'][0];
+		$properties = $this->alignLines(array_unique($grouped['@property'] ?? []));
+		$properties = implode("\n", $properties) ?: " *";
+
+		$class_definition = [$grouped['@class'][0], $grouped['@namespace'][0]];
+		$class_definition = $this->alignLines($class_definition);
+
+		$class_definition = implode("\n", $class_definition);
 		$mixins = implode("\n", array_unique($grouped['@mixin'])) ?? "";
 		$internal_parts = "/**\n" . implode("\n *\n", [
 				$comment,
@@ -488,16 +493,25 @@ class IdeHelper extends Command
 	}
 
 	/**
-	 * @param array $to_implode
-	 * @param int   $longest_line
+	 * @param array $lines
+	 * @param ?int  $longest_line
 	 *
 	 * @return array
 	 */
-	private function alignLines(array $to_implode, int $longest_line): array
+	private function alignLines(array $lines, ?int $longest_line = null): array
 	{
-		$var_regexp = '/\s(\$[a-zA-Z0-9_]+)/';
+		$var_regexp = '/\s([{|$][a-zA-Z0-9_\\\]+}?)/';
+		if (is_null($longest_line)) {
+			foreach ($lines as $line) {
+				$line_length = strlen(preg_replace($var_regexp, '', $line));
+				if ($line_length > $longest_line) {
+					$longest_line = $line_length;
+				}
+			}
+		}
+
 		$to_return = [];
-		foreach ($to_implode as $line) {
+		foreach ($lines as $line) {
 			$length = strlen(preg_replace($var_regexp, '', $line));
 			if ($length == $longest_line) {
 				$to_return[] = $line;
