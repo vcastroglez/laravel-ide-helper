@@ -11,7 +11,7 @@ use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
 use ReflectionProperty;
-use SplFileInfo;
+use Symfony\Component\Finder\SplFileInfo;
 use Throwable;
 
 class IdeHelper extends Command
@@ -319,7 +319,8 @@ class IdeHelper extends Command
 				$connection = $connections[$connection_name] ??= Schema::connection($connection_name);
 
 				$properties = $connection->getColumnListing($table);
-				$current_properties = array_map(fn(DocBlock\Tag $property) => $property->getVariableName(),
+
+				$current_properties = array_map(fn(DocBlock\Tag\PropertyTag $property) => $property->getVariableName(),
 					$phpdoc->getTagsByName('property'));
 
 				$properties_count = count($properties) - 1;
@@ -446,7 +447,13 @@ class IdeHelper extends Command
 		return $internal_parts . "\nclass";
 	}
 
-	private function prependTabs(int $amount, string $doc_block)
+	/**
+	 * @param int    $amount
+	 * @param string $doc_block
+	 *
+	 * @return null|array|string|string[]
+	 */
+	private function prependTabs(int $amount, string $doc_block): array|string|null
 	{
 		$prefix = str_repeat("\t", $amount);
 
