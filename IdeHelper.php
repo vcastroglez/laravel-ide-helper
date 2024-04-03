@@ -43,6 +43,7 @@ class IdeHelper extends Command
 		$helpers_folder = app_path('Http/Helpers');
 
 		$this->generateModelsDocBlock($models_folder, $class);
+		$this->generateClassAndMethodsBlock($models_folder, $class, true);
 		$this->generateClassAndMethodsBlock($controllers_folder, $class);
 		$this->generateClassAndMethodsBlock($services_folder, $class);
 		$this->generateClassAndMethodsBlock($helpers_folder, $class);
@@ -88,7 +89,7 @@ class IdeHelper extends Command
 	/**
 	 * @throws ReflectionException
 	 */
-	private function generateClassAndMethodsBlock(string $target_folder, string $class = null): void
+	private function generateClassAndMethodsBlock(string $target_folder, string $class = null, bool $skip_class_doc = false): void
 	{
 		$order_with_space = [
 			'comment' => true,
@@ -103,37 +104,38 @@ class IdeHelper extends Command
 			$class = $this->getClass($file);
 			$full_class = "$namespace\\$class";
 			$reflection = new ReflectionClass($full_class);
-			$original_doc_block = $reflection->getDocComment();
-			$existing_tags = $this->groupCommentTags($original_doc_block);
-
-			if (empty($existing_tags['@class'])) {
-				$existing_tags['@class'][] = " * @class $class";
-			}
-			if (empty($existing_tags['@namespace'])) {
-				$existing_tags['@namespace'][] = " * @namespace $namespace";
-			}
-
-			$existing_tags['@property'] = $this->getMissingPublicProperties($reflection, $existing_tags['@property']
-				?? []);
-
 			$content = $file->getContents();
+			if (!$skip_class_doc) {
+				$original_doc_block = $reflection->getDocComment();
+				$existing_tags = $this->groupCommentTags($original_doc_block);
+
+				if (empty($existing_tags['@class'])) {
+					$existing_tags['@class'][] = " * @class $class";
+				}
+				if (empty($existing_tags['@namespace'])) {
+					$existing_tags['@namespace'][] = " * @namespace $namespace";
+				}
+
+				$existing_tags['@property'] = $this->getMissingPublicProperties($reflection, $existing_tags['@property']
+					?? []);
+
+				$final_doc_block = $this->getOrderedDocBlock($existing_tags, $order_with_space);
+
+				if (!$original_doc_block) {
+					$original_doc_block = 'class';
+				} else {
+					$original_doc_block .= PHP_EOL . 'class';
+				}
+
+				$count = 0;
+				$content = str_replace($original_doc_block, $final_doc_block, $content, $count);
+				if (!$count) {
+					continue;
+				}
+			}
+
 			$original_lines = preg_split("/((\r?\n)|(\r\n?))/", $content);
-			$final_doc_block = $this->getOrderedDocBlock($existing_tags, $order_with_space);
-
-			if (!$original_doc_block) {
-				$original_doc_block = 'class';
-			} else {
-				$original_doc_block .= PHP_EOL . 'class';
-			}
-
-			$count = 0;
-			$content = str_replace($original_doc_block, $final_doc_block, $content, $count);
-			if (!$count) {
-				continue;
-			}
-
 			$use_statements = $this->getUseStatements($original_lines);
-
 			foreach ($this->getMethodsDocBlocks($reflection) as $line => $doc_block) {
 				$method_line = $original_lines[$line];
 				$doc_block = $this->prependTabs(substr_count($method_line, "\t"), $doc_block) . PHP_EOL . $method_line;
@@ -196,7 +198,9 @@ class IdeHelper extends Command
 
 		$return_type = $method->getReturnType();
 		if (!is_null($return_type)) {
-			$to_implode[] = ' * ';
+			if (!empty($to_implode)) {
+				$to_implode[] = ' * ';
+			}
 			$to_implode[] = ' * @return ' . $return_type;
 		}
 
