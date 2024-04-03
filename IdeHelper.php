@@ -38,15 +38,13 @@ class IdeHelper extends Command
 	{
 		$class = $this->option('class') ?? null;
 		$models_folder = app_path('Models');
-		$controllers_folder = app_path('Http/Controllers');
-		$services_folder = app_path('Http/Services');
-		$helpers_folder = app_path('Http/Helpers');
 
 		$this->generateModelsDocBlock($models_folder, $class);
 		$this->generateClassAndMethodsBlock($models_folder, $class, true);
-		$this->generateClassAndMethodsBlock($controllers_folder, $class);
-		$this->generateClassAndMethodsBlock($services_folder, $class);
-		$this->generateClassAndMethodsBlock($helpers_folder, $class);
+		$all_http_directories = File::directories(app_path('Http'));
+		foreach ($all_http_directories as $directory) {
+			$this->generateClassAndMethodsBlock($directory, $class);
+		}
 	}
 
 	/**
