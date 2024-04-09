@@ -55,14 +55,14 @@ class IdeHelper extends Command
 	public function getNamespace(SplFileInfo $file): string
 	{
 		$match = [];
-		preg_match('/namespace\s+(.*);/', $file->getContents(), $match);
+		preg_match('/\nnamespace\s+(.*);/', $file->getContents(), $match);
 		return $match[1];
 	}
 
 	private function getClass(SplFileInfo $file)
 	{
 		$match = [];
-		preg_match('/class\s+(\w+)\s/', $file->getContents(), $match);
+		preg_match('/\nclass\s+(\w+)\s/', $file->getContents(), $match);
 		return $match[1];
 	}
 
@@ -90,9 +90,9 @@ class IdeHelper extends Command
 	private function generateClassAndMethodsBlock(string $target_folder, string $class = null, bool $skip_class_doc = false): void
 	{
 		$order_with_space = [
-			'comment' => true,
-			'@property' => true,
-			'@class' => false,
+			'comment'    => true,
+			'@property'  => true,
+			'@class'     => false,
 			'@namespace' => false
 		];
 
@@ -102,7 +102,7 @@ class IdeHelper extends Command
 			$class = $this->getClass($file);
 			$full_class = "$namespace\\$class";
 			$reflection = new ReflectionClass($full_class);
-			$content = $file->getContents();
+			$content = $original_content = $file->getContents();
 			if (!$skip_class_doc) {
 				$original_doc_block = $reflection->getDocComment();
 				$existing_tags = $this->groupCommentTags($original_doc_block);
@@ -117,28 +117,30 @@ class IdeHelper extends Command
 				$existing_tags['@property'] = $this->getMissingPublicProperties($reflection, $existing_tags['@property']
 					?? []);
 
-				$final_doc_block = $this->getOrderedDocBlock($existing_tags, $order_with_space);
+				$final_doc_block = $this->getOrderedDocBlock($existing_tags, $order_with_space) . " $class";
 
 				if (!$original_doc_block) {
-					$original_doc_block = 'class';
+					$original_doc_block = "class $class";
 				} else {
-					$original_doc_block .= PHP_EOL . 'class';
+					$original_doc_block .= PHP_EOL . "class $class";
 				}
 
 				$count = 0;
-				$content = str_replace($original_doc_block, $final_doc_block, $content, $count);
+				$content = str_replace($original_doc_block, $final_doc_block, $original_content, $count);
 				if (!$count) {
 					continue;
 				}
 			}
 
-			$original_lines = preg_split("/((\r?\n)|(\r\n?))/", $content);
+			$original_lines = preg_split("/((\r?\n)|(\r\n?))/", $original_content);
 			$use_statements = $this->getUseStatements($original_lines);
-			foreach ($this->getMethodsDocBlocks($reflection) as $line => $doc_block) {
-				$method_line = $original_lines[$line];
-				$doc_block = $this->prependTabs(substr_count($method_line, "\t"), $doc_block) . PHP_EOL . $method_line;
-				$doc_block = str_replace($use_statements, '', $doc_block);
-				$content = str_replace($method_line, $doc_block, $content);
+			$use_statements[] = $namespace . '\\';
+			foreach ($this->getMethodsDocBlocks($reflection) as $doc_block_data) {
+				list($start, $doc) = $doc_block_data;
+				$method_line = $original_lines[$start];
+				$doc = $this->prependTabs(substr_count($method_line, "\t"), $doc) . PHP_EOL . $method_line;
+				$doc = str_replace($use_statements, '', $doc);
+				$content = str_replace($method_line, $doc, $content);
 			}
 
 
@@ -167,7 +169,7 @@ class IdeHelper extends Command
 
 			$method_line = $method->getStartLine() - 1;
 			$method_nice_doc = $this->getMethodDoc($method);
-			$to_return[$method_line] = $method_nice_doc;
+			$to_return[] = [$method_line, $method_nice_doc];
 		}
 
 		return $to_return;
@@ -267,7 +269,7 @@ class IdeHelper extends Command
 	{
 		$files = File::allFiles($target_folder);
 		if (!empty($class)) {
-			$files = array_filter($files, function ($file) use ($class) {
+			$files = array_filter($files, function($file) use ($class){
 				return str_replace('.php', '', $file->getFilename()) == $class;
 			});
 		}
@@ -280,7 +282,7 @@ class IdeHelper extends Command
 	}
 
 	/**
-	 * @param string      $target_folder
+	 * @param string $target_folder
 	 * @param string|null $class
 	 *
 	 * @return void
@@ -322,7 +324,7 @@ class IdeHelper extends Command
 
 				$properties = $connection->getColumnListing($table);
 
-				$current_properties = array_map(fn(DocBlock\Tag\PropertyTag $property) => $property->getVariableName(),
+				$current_properties = array_map(fn (DocBlock\Tag\PropertyTag $property) => $property->getVariableName(),
 					$phpdoc->getTagsByName('property'));
 
 				$properties_count = count($properties) - 1;
@@ -455,7 +457,7 @@ class IdeHelper extends Command
 	}
 
 	/**
-	 * @param int    $amount
+	 * @param int $amount
 	 * @param string $doc_block
 	 *
 	 * @return null|array|string|string[]
@@ -496,7 +498,7 @@ class IdeHelper extends Command
 
 	/**
 	 * @param array $lines
-	 * @param ?int  $longest_line
+	 * @param ?int $longest_line
 	 *
 	 * @return array
 	 */
